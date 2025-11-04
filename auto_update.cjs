@@ -43,7 +43,7 @@ async function clickSaveIfAny(page){
     await page.reload({waitUntil: 'networkidle2'}).catch(()=>{});
   } else {
     // give server time to process
-    await page.waitForTimeout(2000);
+    await new Promise(r => setTimeout(r, 3000));
   }
 }
 
