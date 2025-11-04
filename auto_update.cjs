@@ -1,5 +1,4 @@
-// auto_update.cjs
-// Node script for GitHub Actions to login to perchance.org and prepend a safe comment + save
+// auto_update.cjs — 2025 stable version
 
 const puppeteer = require('puppeteer');
 
@@ -16,9 +15,7 @@ const GENERATORS = [
 const EMAIL = process.env.PERCH_EMAIL || '';
 const PASS = process.env.PERCH_PASS || '';
 
-function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
-}
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function chooseCommentPrefix(content) {
   const lc = (content || '').slice(0, 1000).toLowerCase();
@@ -31,8 +28,8 @@ function chooseCommentPrefix(content) {
 
 async function clickSaveIfAny(page) {
   const clicked = await page.evaluate(() => {
-    const textCandidates = ['save', 'save changes', 'update', 'publish', 'save & publish', 'save draft'];
-    let btn = Array.from(document.querySelectorAll('button, a, input[type=button], input[type=submit]'))
+    const textCandidates = ['save', 'update', 'publish', 'save & publish', 'save draft'];
+    const btn = Array.from(document.querySelectorAll('button, a, input[type=button], input[type=submit]'))
       .find(el => {
         const t = (el.innerText || el.value || '').trim().toLowerCase();
         return textCandidates.some(s => t === s || t.includes(s));
@@ -40,88 +37,95 @@ async function clickSaveIfAny(page) {
     if (btn) { btn.click(); return true; }
     return false;
   });
-  if (!clicked) {
-    await page.reload({ waitUntil: 'networkidle2' }).catch(() => { });
-  } else {
-    await sleep(3000);
+  if (!clicked) await page.reload({ waitUntil: 'networkidle2' }).catch(() => { });
+  else await sleep(3000);
+}
+
+async function waitForEditor(page) {
+  for (let i = 0; i < 10; i++) {
+    const found = await page.evaluate(() => {
+      return !!(document.querySelector('textarea') ||
+                document.querySelector('.CodeMirror') ||
+                document.querySelector('[contenteditable="true"]'));
+    });
+    if (found) return true;
+    await sleep(1000);
   }
+  return false;
 }
 
 async function handleEditorAndSave(page) {
-  try {
-    const ta = await page.$('textarea');
-    if (ta) {
-      const content = await page.evaluate(t => t.value, ta);
-      if (content && content.includes(MARKER)) {
-        console.log('marker present in textarea — just saving');
-        await clickSaveIfAny(page);
-        return;
-      }
-      const prefix = chooseCommentPrefix(content);
-      await page.evaluate((t, pref) => { t.value = pref + t.value; t.dispatchEvent(new Event('input', { bubbles: true })); }, ta, prefix);
-      await sleep(800);
-      await clickSaveIfAny(page);
-      return;
-    }
-  } catch (e) { console.log('textarea attempt failed:', e.message); }
+  await waitForEditor(page);
+  const editor = await page.evaluate(() => {
+    if (document.querySelector('textarea')) return 'textarea';
+    if (document.querySelector('.CodeMirror')) return 'CodeMirror';
+    if (document.querySelector('[contenteditable="true"]')) return 'contenteditable';
+    return null;
+  });
 
-  try {
-    const cm = await page.$('.CodeMirror');
-    if (cm) {
-      const content = await page.evaluate(() => {
-        const cm = document.querySelector('.CodeMirror');
-        let ta = cm ? cm.querySelector('textarea') : null;
-        if (ta) return ta.value;
-        const pre = cm ? cm.querySelector('.CodeMirror-code') : null;
-        return pre ? pre.innerText : '';
-      });
-      if (content && content.includes(MARKER)) {
-        console.log('marker present in CodeMirror — saving only');
-        await clickSaveIfAny(page);
-        return;
-      }
-      const prefix = chooseCommentPrefix(content);
+  if (!editor) {
+    console.log('⚠️ No editable field detected — skipping content edit, trying save only');
+    await clickSaveIfAny(page);
+    return;
+  }
+
+  async function addMarker(content, prefixFn) {
+    const prefix = prefixFn(content);
+    if (editor === 'textarea') {
+      await page.evaluate(pref => {
+        const t = document.querySelector('textarea');
+        if (t && !t.value.includes(pref)) {
+          t.value = pref + t.value;
+          t.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      }, prefix);
+    } else if (editor === 'CodeMirror') {
       await page.evaluate(pref => {
         const cm = document.querySelector('.CodeMirror');
         if (!cm) return;
         const ta = cm.querySelector('textarea');
-        if (ta) { ta.value = pref + ta.value; ta.dispatchEvent(new Event('input', { bubbles: true })); return; }
-        const pre = cm.querySelector('.CodeMirror-code');
-        if (pre) pre.innerText = pref + pre.innerText;
+        if (ta && !ta.value.includes(pref)) {
+          ta.value = pref + ta.value;
+          ta.dispatchEvent(new Event('input', { bubbles: true }));
+        }
       }, prefix);
-      await sleep(900);
-      await clickSaveIfAny(page);
-      return;
-    }
-  } catch (e) { console.log('CodeMirror attempt failed:', e.message); }
-
-  try {
-    const ce = await page.$('[contenteditable="true"]');
-    if (ce) {
-      const content = await page.evaluate(el => el.innerText, ce);
-      if (content && content.includes(MARKER)) {
-        console.log('marker present in contenteditable — saving only');
-        await clickSaveIfAny(page);
-        return;
-      }
-      const prefix = chooseCommentPrefix(content);
+    } else if (editor === 'contenteditable') {
       await page.evaluate(pref => {
         const el = document.querySelector('[contenteditable="true"]');
-        if (el) { el.innerText = pref + el.innerText; el.dispatchEvent(new Event('input', { bubbles: true })); }
+        if (el && !el.innerText.includes(pref)) {
+          el.innerText = pref + el.innerText;
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+        }
       }, prefix);
-      await sleep(900);
+    }
+  }
+
+  try {
+    const content = await page.evaluate(() => {
+      if (document.querySelector('textarea')) return document.querySelector('textarea').value;
+      if (document.querySelector('.CodeMirror-code')) return document.querySelector('.CodeMirror-code').innerText;
+      if (document.querySelector('[contenteditable="true"]')) return document.querySelector('[contenteditable="true"]').innerText;
+      return '';
+    });
+
+    if (content && content.includes(MARKER)) {
+      console.log('✅ Marker already present, saving only...');
       await clickSaveIfAny(page);
       return;
     }
-  } catch (e) { console.log('contenteditable attempt failed:', e.message); }
 
-  console.log('No editable area detected or update not possible — trying save only');
-  await clickSaveIfAny(page);
+    await addMarker(content, chooseCommentPrefix);
+    await sleep(800);
+    await clickSaveIfAny(page);
+    console.log('💾 Updated and saved successfully.');
+  } catch (e) {
+    console.log('Editor update failed:', e.message);
+  }
 }
 
 (async () => {
   if (!EMAIL || !PASS) {
-    console.error('PERCH_EMAIL or PERCH_PASS not set. Exiting.');
+    console.error('❌ PERCH_EMAIL or PERCH_PASS not set. Exiting.');
     process.exit(1);
   }
 
@@ -131,43 +135,43 @@ async function handleEditorAndSave(page) {
   });
 
   const page = await browser.newPage();
-  page.setDefaultNavigationTimeout(30000);
+  page.setDefaultNavigationTimeout(40000);
 
+  // --- LOGIN ---
   try {
-    console.log('Logging in...');
+    console.log('🔐 Logging in...');
     await page.goto('https://perchance.org/login', { waitUntil: 'networkidle2' });
-    const emailSel = await page.$('input[name=email], input[type=email], input#email');
-    const passSel = await page.$('input[name=password], input[type=password], input#password');
-
-    if (emailSel && passSel) {
-      await page.type('input[name=email], input[type=email], input#email', EMAIL, { delay: 30 }).catch(() => { });
-      await page.type('input[name=password], input[type=password], input#password', PASS, { delay: 30 }).catch(() => { });
+    const hasInputs = await page.$('input[type=email], input[name=email]');
+    if (hasInputs) {
+      await page.type('input[type=email], input[name=email]', EMAIL, { delay: 30 });
+      await page.type('input[type=password], input[name=password]', PASS, { delay: 30 });
       await Promise.all([
-        page.click('button[type=submit], button:has-text("Log"), button:has-text("Login")').catch(() => { }),
-        page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => { })
+        page.click('button[type=submit], button:has-text("Login")').catch(() => { }),
+        page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 20000 }).catch(() => { })
       ]);
-      console.log('Login attempt done.');
+      console.log('✅ Logged in.');
     } else {
-      console.log('Login inputs not found - skipping explicit login (maybe not required).');
+      console.log('ℹ️ Login page not detected, maybe session not needed.');
     }
-  } catch (e) {
-    console.log('Login error (continuing):', e.message);
+  } catch (err) {
+    console.log('⚠️ Login step failed but continuing:', err.message);
   }
 
-  for (const url of GENERATORS) {
+  // --- GENERATORS LOOP ---
+  for (const rawUrl of GENERATORS) {
+    const url = rawUrl.endsWith('/edit') ? rawUrl : rawUrl + '/edit';
     try {
-      console.log('\n-> Visiting', url);
+      console.log(`\n➡️ Visiting ${url}`);
       await page.goto(url, { waitUntil: 'networkidle2' });
-      await sleep(1200);
-      await handleEditorAndSave(page);
       await sleep(1500);
-      console.log('Done with', url);
-    } catch (err) {
-      console.log('Error processing', url, err.message);
+      await handleEditorAndSave(page);
+      await sleep(1000);
+    } catch (e) {
+      console.log('❌ Error on', url, e.message);
     }
   }
 
   await browser.close();
-  console.log('\nAll done.');
+  console.log('\n🎯 All done.');
   process.exit(0);
 })();
