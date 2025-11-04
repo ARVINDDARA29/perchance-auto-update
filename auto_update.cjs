@@ -1,5 +1,6 @@
 // auto_update.cjs
 const puppeteer = require("puppeteer");
+const fs = require("fs");
 
 (async () => {
   console.log("🚀 Launching Puppeteer...");
@@ -33,6 +34,7 @@ const puppeteer = require("puppeteer");
     console.log("⚠️ Login inputs not found — skipping explicit login.");
   }
 
+  // ✅ List of generators
   const generators = [
     "----deep--reserch--with--ai--",
     "---adult---girlfriend---",
@@ -41,13 +43,16 @@ const puppeteer = require("puppeteer");
     "ai----girlfriend---",
   ];
 
+  // ✅ Create debug folder if not exists
+  if (!fs.existsSync("debug_screens")) fs.mkdirSync("debug_screens");
+
   for (const name of generators) {
     const url = `https://perchance.org/${name}#edit`;
     console.log(`➡️ Visiting: ${url}`);
 
     try {
       await page.goto(url, { waitUntil: "domcontentloaded" });
-      await new Promise(r => setTimeout(r, 3000)); // wait for editor to load
+      await new Promise(r => setTimeout(r, 4000)); // wait for editor to load
 
       // Try finding editable area (CodeMirror or textarea)
       const editor = await page.$(".CodeMirror textarea, textarea, [contenteditable='true']");
@@ -57,7 +62,11 @@ const puppeteer = require("puppeteer");
         await page.keyboard.type("// Auto-updated by GitHub Action\n", { delay: 10 });
         console.log("✏️  Added comment line to editor.");
       } else {
-        console.log("⚠️ No editable field found, skipping content change.");
+        console.log("⚠️ No editable field found, taking debug screenshot...");
+        await page.screenshot({
+          path: `debug_screens/${name.replace(/[^a-z0-9\-]/gi, "_")}_no_editor.png`,
+          fullPage: true,
+        });
       }
 
       // Try clicking Save button
@@ -66,12 +75,20 @@ const puppeteer = require("puppeteer");
         await saveButton.click();
         console.log("💾 Clicked Save button.");
       } else {
-        console.log("⚠️ Save button not found, skipping.");
+        console.log("⚠️ Save button not found, taking debug screenshot...");
+        await page.screenshot({
+          path: `debug_screens/${name.replace(/[^a-z0-9\-]/gi, "_")}_no_save.png`,
+          fullPage: true,
+        });
       }
 
       console.log(`✅ Updated: ${url}`);
     } catch (err) {
       console.log(`❌ Error on ${url}: ${err.message}`);
+      await page.screenshot({
+        path: `debug_screens/${name.replace(/[^a-z0-9\-]/gi, "_")}_error.png`,
+        fullPage: true,
+      });
     }
   }
 
