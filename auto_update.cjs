@@ -7,11 +7,11 @@ const puppeteer = require('puppeteer');
 const MARKER = 'perchance-autosave-marker-2025';
 const COMMENT_TEXT = '-- This generator updated automatically';
 const GENERATORS = [
-  "https://perchance.org/----deep--reserch--with--ai--/edit",
-  "https://perchance.org/---adult---girlfriend---/edit",
-  "https://perchance.org/the-girlfriend---prime-2-0-ultra/edit",
-  "https://perchance.org/--girlfriend---/edit",
-  "https://perchance.org/ai----girlfriend---/edit"
+  "https://perchance.org/----deep--reserch--with--ai--#edit",
+  "https://perchance.org/---adult---girlfriend---#edit",
+  "https://perchance.org/the-girlfriend---prime-2-0-ultra#edit",
+  "https://perchance.org/--girlfriend---#edit",
+  "https://perchance.org/ai----girlfriend---#edit"
 ];
 
 const EMAIL = process.env.PERCH_EMAIL || '';
