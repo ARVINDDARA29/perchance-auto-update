@@ -1,6 +1,5 @@
-// auto_update.cjs
-// Perchance Auto Updater — fully working, GitHub Actions ready version
-// by ChatGPT (Optimized 2025)
+// auto_update.cjs — GitHub Actions Safe Version (no waitForTimeout)
+// Fully fixed version
 
 const puppeteer = require('puppeteer');
 
@@ -17,9 +16,10 @@ const GENERATORS = [
 const EMAIL = process.env.PERCH_EMAIL || '';
 const PASS = process.env.PERCH_PASS || '';
 
-/**
- * Detects what kind of comment prefix fits the current editor content.
- */
+function delay(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
 function chooseCommentPrefix(content) {
   const lc = (content || '').slice(0, 1000).toLowerCase();
   if (/<\s*script|<!doctype|<html|<\/\w+>/.test(lc)) return `<!-- ${MARKER} -->\n`;
@@ -29,9 +29,6 @@ function chooseCommentPrefix(content) {
   return `// ${MARKER}\n`;
 }
 
-/**
- * Clicks the Save or Publish button if available
- */
 async function clickSaveIfAny(page) {
   const clicked = await page.evaluate(() => {
     const textCandidates = ['save', 'save changes', 'update', 'publish', 'save & publish', 'save draft'];
@@ -49,15 +46,11 @@ async function clickSaveIfAny(page) {
     await page.reload({ waitUntil: 'networkidle2' }).catch(() => {});
   } else {
     console.log('💾 Save clicked, waiting...');
-    await new Promise(r => setTimeout(r, 4000));
+    await delay(4000);
   }
 }
 
-/**
- * Handles all possible editor types (textarea, CodeMirror, contenteditable)
- */
 async function handleEditorAndSave(page) {
-  // Try textarea
   const ta = await page.$('textarea');
   if (ta) {
     const content = await page.evaluate(t => t.value, ta);
@@ -72,12 +65,11 @@ async function handleEditorAndSave(page) {
       t.dispatchEvent(new Event('input', { bubbles: true }));
     }, ta, prefix);
     console.log('✏️ Marker added in textarea.');
-    await page.waitForTimeout(1000);
+    await delay(1000);
     await clickSaveIfAny(page);
     return;
   }
 
-  // Try CodeMirror
   const cm = await page.$('.CodeMirror');
   if (cm) {
     const content = await page.evaluate(() => {
@@ -100,12 +92,11 @@ async function handleEditorAndSave(page) {
       }
     }, prefix);
     console.log('✏️ Marker added in CodeMirror.');
-    await page.waitForTimeout(1000);
+    await delay(1000);
     await clickSaveIfAny(page);
     return;
   }
 
-  // Try contenteditable
   const ce = await page.$('[contenteditable="true"]');
   if (ce) {
     const content = await page.evaluate(el => el.innerText, ce);
@@ -123,7 +114,7 @@ async function handleEditorAndSave(page) {
       }
     }, prefix);
     console.log('✏️ Marker added in contenteditable.');
-    await page.waitForTimeout(1000);
+    await delay(1000);
     await clickSaveIfAny(page);
     return;
   }
@@ -132,9 +123,6 @@ async function handleEditorAndSave(page) {
   await clickSaveIfAny(page);
 }
 
-/**
- * Main automation process
- */
 (async () => {
   if (!EMAIL || !PASS) {
     console.error('❌ PERCH_EMAIL or PERCH_PASS not set. Exiting.');
@@ -169,9 +157,9 @@ async function handleEditorAndSave(page) {
       console.log(`\n➡️ Visiting: ${url}`);
       await page.goto(url, { waitUntil: 'networkidle2' });
       await page.evaluate(() => { location.hash = '#edit'; });
-      await page.waitForTimeout(5000); // wait for editor to load
+      await delay(5000); // wait for editor to load
       await handleEditorAndSave(page);
-      await page.waitForTimeout(1500);
+      await delay(1500);
       console.log(`✅ Updated: ${url}`);
     } catch (err) {
       console.log(`❌ Error on ${url}: ${err.message}`);
