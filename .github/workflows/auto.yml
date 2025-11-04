@@ -27,4 +27,4 @@ jobs:
           PERCH_EMAIL: ${{ secrets.PERCH_EMAIL }}
           PERCH_PASS: ${{ secrets.PERCH_PASS }}
         run: |
-          node auto_update.js
+          node auto_update.cjs
