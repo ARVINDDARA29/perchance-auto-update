@@ -16,13 +16,12 @@ const fs = require("fs");
   const EMAIL = process.env.PERCH_EMAIL;
   const PASS = process.env.PERCH_PASS;
 
-  // ✅ Go to login page
   await page.goto("https://perchance.org/login", { waitUntil: "networkidle2" });
 
-  // Try to find login form
+  // ✅ Find login form inputs
   const emailInput = await page.$('input[type="email"], input[name="email"]');
   const passInput = await page.$('input[type="password"], input[name="password"]');
-  const loginBtn = await page.$('button[type="submit"], button:has-text("Log in")');
+  const loginBtn = await page.$("button[type='submit'], button");
 
   if (emailInput && passInput && loginBtn) {
     await emailInput.type(EMAIL);
@@ -31,10 +30,10 @@ const fs = require("fs");
     await page.waitForNavigation({ waitUntil: "networkidle2" });
     console.log("✅ Login successful.");
   } else {
-    console.log("⚠️ Login inputs not found — skipping explicit login.");
+    console.log("⚠️ Login inputs not found — skipping explicit login (maybe already logged in).");
   }
 
-  // ✅ List of generators
+  // ✅ List of generators to update
   const generators = [
     "----deep--reserch--with--ai--",
     "---adult---girlfriend---",
@@ -43,7 +42,6 @@ const fs = require("fs");
     "ai----girlfriend---",
   ];
 
-  // ✅ Create debug folder if not exists
   if (!fs.existsSync("debug_screens")) fs.mkdirSync("debug_screens");
 
   for (const name of generators) {
@@ -52,9 +50,9 @@ const fs = require("fs");
 
     try {
       await page.goto(url, { waitUntil: "domcontentloaded" });
-      await new Promise(r => setTimeout(r, 4000)); // wait for editor to load
+      await new Promise((r) => setTimeout(r, 4000)); // wait for editor to load
 
-      // Try finding editable area (CodeMirror or textarea)
+      // Try to find editable area
       const editor = await page.$(".CodeMirror textarea, textarea, [contenteditable='true']");
 
       if (editor) {
@@ -69,10 +67,18 @@ const fs = require("fs");
         });
       }
 
-      // Try clicking Save button
-      const saveButton = await page.$("button:has-text('Save'), .save-button, [data-action='save']");
-      if (saveButton) {
-        await saveButton.click();
+      // Save button detection — use text() inside page.evaluate
+      const saveBtn = await page.$eval("body", () => {
+        const btns = Array.from(document.querySelectorAll("button"));
+        return btns.find(b => b.textContent.includes("Save")) ? true : false;
+      }).catch(() => false);
+
+      if (saveBtn) {
+        await page.evaluate(() => {
+          const btns = Array.from(document.querySelectorAll("button"));
+          const save = btns.find(b => b.textContent.includes("Save"));
+          if (save) save.click();
+        });
         console.log("💾 Clicked Save button.");
       } else {
         console.log("⚠️ Save button not found, taking debug screenshot...");
