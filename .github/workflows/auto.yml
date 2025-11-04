@@ -1,0 +1,24 @@
+name: Auto Update Perchance
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # हर 10 मिनट में चलेगा
+  workflow_dispatch:          # manual run भी कर सकते हैं
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+
+      - name: Run auto update script
+        run: |
+          npm install node-fetch@2
+          node auto_update.js
