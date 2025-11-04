@@ -13,27 +13,22 @@ const fs = require("fs");
 
   console.log("🔐 Logging in to Perchance...");
 
-  const EMAIL = process.env.PERCH_EMAIL;
-  const PASS = process.env.PERCH_PASS;
-
   await page.goto("https://perchance.org/login", { waitUntil: "networkidle2" });
 
-  // ✅ Find login form inputs
   const emailInput = await page.$('input[type="email"], input[name="email"]');
   const passInput = await page.$('input[type="password"], input[name="password"]');
   const loginBtn = await page.$("button[type='submit'], button");
 
   if (emailInput && passInput && loginBtn) {
-    await emailInput.type(EMAIL);
-    await passInput.type(PASS);
+    await emailInput.type(process.env.PERCH_EMAIL);
+    await passInput.type(process.env.PERCH_PASS);
     await loginBtn.click();
     await page.waitForNavigation({ waitUntil: "networkidle2" });
     console.log("✅ Login successful.");
   } else {
-    console.log("⚠️ Login inputs not found — skipping explicit login (maybe already logged in).");
+    console.log("⚠️ Login inputs not found — skipping explicit login.");
   }
 
-  // ✅ List of generators to update
   const generators = [
     "----deep--reserch--with--ai--",
     "---adult---girlfriend---",
@@ -49,50 +44,49 @@ const fs = require("fs");
     console.log(`➡️ Visiting: ${url}`);
 
     try {
-      await page.goto(url, { waitUntil: "domcontentloaded" });
-      await new Promise((r) => setTimeout(r, 4000)); // wait for editor to load
+      await page.goto(url, { waitUntil: "networkidle2" });
+      await page.waitForTimeout(5000); // editor load time
 
-      // Try to find editable area
-      const editor = await page.$(".CodeMirror textarea, textarea, [contenteditable='true']");
+      // 🔍 Find the iframe
+      const frames = page.frames();
+      const editorFrame = frames.find(f => f.url().includes("edit"));
+      if (!editorFrame) {
+        console.log("⚠️ No editor iframe found!");
+        await page.screenshot({
+          path: `debug_screens/${name}_no_iframe.png`,
+          fullPage: true,
+        });
+        continue;
+      }
 
+      // 🔍 Inside iframe: find CodeMirror or textarea
+      const editor = await editorFrame.$(".CodeMirror textarea, textarea, [contenteditable='true']");
       if (editor) {
         await editor.click({ clickCount: 3 });
-        await page.keyboard.type("// Auto-updated by GitHub Action\n", { delay: 10 });
-        console.log("✏️  Added comment line to editor.");
+        await editor.type("\n// 🔁 Auto-updated by GitHub Action", { delay: 10 });
+        console.log("✏️ Edited text inside iframe editor.");
       } else {
-        console.log("⚠️ No editable field found, taking debug screenshot...");
+        console.log("⚠️ Editor not found inside iframe.");
         await page.screenshot({
-          path: `debug_screens/${name.replace(/[^a-z0-9\-]/gi, "_")}_no_editor.png`,
+          path: `debug_screens/${name}_no_editor.png`,
           fullPage: true,
         });
       }
 
-      // Save button detection — use text() inside page.evaluate
-      const saveBtn = await page.$eval("body", () => {
-        const btns = Array.from(document.querySelectorAll("button"));
-        return btns.find(b => b.textContent.includes("Save")) ? true : false;
-      }).catch(() => false);
-
-      if (saveBtn) {
-        await page.evaluate(() => {
-          const btns = Array.from(document.querySelectorAll("button"));
-          const save = btns.find(b => b.textContent.includes("Save"));
-          if (save) save.click();
-        });
+      // 💾 Click “Save” button (outside iframe)
+      const saveButton = await page.$x("//button[contains(., 'Save')]");
+      if (saveButton.length > 0) {
+        await saveButton[0].click();
         console.log("💾 Clicked Save button.");
       } else {
-        console.log("⚠️ Save button not found, taking debug screenshot...");
-        await page.screenshot({
-          path: `debug_screens/${name.replace(/[^a-z0-9\-]/gi, "_")}_no_save.png`,
-          fullPage: true,
-        });
+        console.log("⚠️ Save button not found.");
       }
 
       console.log(`✅ Updated: ${url}`);
     } catch (err) {
       console.log(`❌ Error on ${url}: ${err.message}`);
       await page.screenshot({
-        path: `debug_screens/${name.replace(/[^a-z0-9\-]/gi, "_")}_error.png`,
+        path: `debug_screens/${name}_error.png`,
         fullPage: true,
       });
     }
