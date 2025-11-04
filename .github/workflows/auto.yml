@@ -1,24 +1,30 @@
-name: Auto Update Perchance
+name: Perchance Auto Update (every 10 minutes)
 
 on:
   schedule:
-    - cron: "*/10 * * * *"   # हर 10 मिनट में चलेगा
-  workflow_dispatch:          # manual run भी कर सकते हैं
+    - cron: "*/10 * * * *"   # every 10 minutes
+  workflow_dispatch:          # manual trigger
 
 jobs:
   update:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: '20'
 
-      - name: Run auto update script
+      - name: Install dependencies
         run: |
-          npm install node-fetch@2
+          npm ci || npm install
+          npm install puppeteer --no-save
+
+      - name: Run auto update
+        env:
+          PERCH_EMAIL: ${{ secrets.PERCH_EMAIL }}
+          PERCH_PASS: ${{ secrets.PERCH_PASS }}
+        run: |
           node auto_update.js
