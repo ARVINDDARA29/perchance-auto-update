@@ -1,13 +1,8 @@
 {
   "name": "perchance-auto-update",
   "version": "1.0.0",
-  "description": "Auto updater for Perchance generators",
-  "main": "auto_update.js",
   "type": "module",
-  "scripts": {
-    "start": "node auto_update.js"
-  },
   "dependencies": {
-    "puppeteer": "^22.10.0"
+    "puppeteer": "^23.0.0"
   }
 }
